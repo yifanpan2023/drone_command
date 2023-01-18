@@ -4,7 +4,7 @@ install pymavlink: https://mavlink.io/en/mavgen_python/
 install qground control: http://qgroundcontrol.com/
 enviroment: https://www.youtube.com/watch?v=1FpJvUVPxL0&t=0s
 
-#how to run code:
+# how to run code:
 1. start sim_viechle.py -v arducopter to create a simulated drone
 2. run QgroundControl to start the simulator
 3. run code in this repo, starting from guided, and takeoff
@@ -25,3 +25,8 @@ more filters, see https://mavlink.io/en/messages/common.html#MESSAGE_INTERVAL
 # change speed, yaw, altidude
 MAV_CMD_DO_CHANGE_SPEED, MAV_CMD_CONDITION_YAW, MAV_CMD_DO_CHANGE_ALTITUDE 
 https://mavlink.io/en/messages/common.html#MAV_FRAME_LOCAL_NED
+
+change speed after the destination is set. In set target, velocity will be set to default (10)
+
+# for changing of flight mode,
+see https://ardupilot.org/copter/docs/parameters.html#fltmode1
