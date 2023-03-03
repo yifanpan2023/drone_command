@@ -96,7 +96,7 @@ class Drone:
                 int(0b110111111000), int(lat), int(lon), int(alt), 0, 0, 0, 0, 0, 0, 1.57, 0.5))
         
 def writeBlankCommand():
-    f = open("command.txt", "w")
+    f = open("/share/command.txt", "w")
     f.write(EMPTY_FILE)
     f.close()
 
@@ -104,13 +104,13 @@ def writeBlankCommand():
 
     
 def writeBlankCommand():
-    f = open("command.txt", "w")
+    f = open("/share/command.txt", "w")
     f.write(EMPTY_FILE)
     f.close()
 
 
 def readcommand():
-    f = open("command.txt", "r")
+    f = open("/share/command.txt", "r")
     content = f.read()
     f.close()
     return content
