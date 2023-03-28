@@ -15,6 +15,7 @@ msg = the_connection.recv_match( type='GLOBAL_POSITION_INT', blocking=True)
 initial_lat = (msg.lat)
 initial_lon = (msg.lon)
 
+# this function retrun a list of rad, list of lat and list of lon about target location
 def generate_traj(initial_lat, initial_lon, radius):
     rad = [0]
     lat = [initial_lat+radius*10000/111.32]
@@ -25,6 +26,8 @@ def generate_traj(initial_lat, initial_lon, radius):
         lon = lon + [(initial_lon+radius*math.sin(rad[i+1]) *10000/111.32)]
     
     return rad, lat, lon
+
+# this funciton will calculate the velocity by v = dx/t
 def calculate_speed(start_lat, start_lon, target_lat, target_lon, interval, offset_lon, offset_lat):
     diff_x = (target_lat - start_lat + offset_lat)/10000*111.32
     diff_y = (target_lon - start_lon + offset_lon)/10000*111.32
@@ -36,13 +39,15 @@ traj_yaw, traj_lat, traj_lon = (generate_traj(initial_lat,initial_lon,10))
 
 print(calculate_speed(traj_lat[0],traj_lon[0],traj_lat[1],traj_lon[1],1,0,0))
 
-
+# go to a point on circle, while leaving some space to accelerate
 the_connection.mav.send(mavutil.mavlink.MAVLink_set_position_target_global_int_message(10, the_connection.target_system,
                          the_connection.target_component, 
                          mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT, 
                          int(0b110111111000), int(traj_lat[0]), 
                         int(traj_lon[0]-1.5/10000*111.32), 10, 0, 0, 0, 0, 0, 0, 0, 0))
 time.sleep(10)
+
+# orbit by sending command to go to targt points
 for i in range(120):
     the_connection.mav.send(mavutil.mavlink.MAVLink_set_position_target_global_int_message(10, the_connection.target_system,
                             the_connection.target_component, 
@@ -52,7 +57,11 @@ for i in range(120):
     time.sleep(0.8)
 msg = the_connection.recv_match( type='GLOBAL_POSITION_INT', blocking=True)
 
+
 print(int(traj_lat[0]),traj_lon[0]-1.5/10000*111.32)
+
+# go to a point on circle, while leaving some space to accelerate
+
 the_connection.mav.send(mavutil.mavlink.MAVLink_set_position_target_global_int_message(10, the_connection.target_system,
                          the_connection.target_component, 
                          mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT, 
@@ -67,6 +76,7 @@ while(time.time()<start_time+3):
 print(msg.lat, msg.lon)
 print("==============")
 
+# start orbiting by velocity control
 t = 0
 while 1:
     if(t == 0):
@@ -98,6 +108,3 @@ while 1:
     time.sleep(1-time.time()+time_run)
     
 
-
-
-#+50000/111.32
