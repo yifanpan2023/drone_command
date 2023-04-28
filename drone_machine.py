@@ -11,7 +11,7 @@ GUIDED_STATE = 1
 
 EMPTY_FILE = "9"+"0"*85
 
-TIMEOUT = 100
+TIMEOUT = 1000000000000000000000000000000
 DRONE1_START = 0
 LANDING_COMMAND = 0
 TAKEOFF_COMMAND = 1
@@ -85,7 +85,7 @@ def takeoff():
 	msg = the_connection.recv_match(type='COMMAND_ACK', blocking=True)
 	return (msg.result)
 
-def takeoff_procedure(altitude):
+def takeoff_procedure():
 	if (guided() > 0):
 		return 1
 	if (arm() > 0):
@@ -101,20 +101,24 @@ def land():
 def writeTelemetry(ack):
 	battery_info = msg_battery.battery_remaining
 
-	gps_info = msg_gps
-	gps_lat, gps_long, alt = gps_info.lat, gps_info.lon, gps_info.alt/1000
+	gps_lat = msg_gps.lat
+	gps_long =  msg_gps.lon
+	alt = msg_gps.alt/1000
+	yaw = msg_gps.hdg
+	print(gps_lat)
 
-	yaw = gps_info.hdg
-	telemetry =(str(ack)+
-	      str(battery_info).zfill(3)+
-		  str(gps_lat).zfill(11)+
-		  str(gps_long).zfill(11)+
-		  str(alt).zfill(6)+
-		  str(yaw).zfill(6)+
-		  str(orbit_index).zfill(4)+
-		  str(current_state)+
-		  str(orbit_state)+
-		  str(time.time()*1000))
+	telemetry =(
+		'0'+
+		str(ack)+
+		str(battery_info).zfill(3)+
+		str(gps_lat).zfill(11)+
+		str(gps_long).zfill(11)+
+		str(alt).zfill(6)+
+		str(yaw).zfill(6)+
+		str(orbit_index).zfill(4)+
+		str(current_state)+
+		str(orbit_state)+
+		str(time.time()*1000))
 	
 	f = open("/home/yifanpan/share/log.txt", "w")
 	f.write(telemetry)
@@ -171,7 +175,7 @@ def calculate_speed(target_lat, target_lon, target_vx, target_vy):
     current_vy = msg_gps.vy
     current_y = msg_gps.lon
     current_x = msg_gps.lat
-
+    print(msg_gps.lat)
     new_vx = Kp*(target_lat-current_x)+Kd*(target_vx-current_vx)
     new_vy = Kp*(target_lon-current_y)+Kd*(target_vy-current_vy)
     return new_vx, new_vy
@@ -234,6 +238,7 @@ while (1):
 	message_received = readcommand()
 
 	# get the timestamp for new command
+	print(message_received[58:])
 	current_timestamp = int(message_received[58:])
 	current_command = message_received[:58]
 	#print("current_timestamp: "+str(current_timestamp))
@@ -271,8 +276,8 @@ while (1):
 			if (command_type == 1):
 
 				print("command is takeoff")
-				target_alt = int(message_received[23:29])
-				ack = takeoff_procedure(target_alt)
+				#target_alt = int(message_received[23:29])
+				ack = takeoff_procedure()
 				print(ack)
 				# takeoff success, switch to guided mode
 				if (ack == 0):
@@ -330,8 +335,10 @@ while (1):
 						orbit_state = ONE_ORBIT
 					else: 
 						orbit_state = EXPLRE_ORBIT
-						explore_lat = int(message_received[1:12])
+						explore_lat = int(message_received[1:11])
 						explore_lon = int(message_received[12:23])
+						print(explore_lat)
+						print(explore_lon)
 						go_pos(explore_lat, explore_lon, 0)
 				else:
 					print(orbit_index)
@@ -344,6 +351,10 @@ while (1):
 			#13
 			elif(orbit_state == EXPLRE_ORBIT):
 				print("in EXPLRE_ORBIT state")
+				print(msg_gps.lat)
+				print(explore_lat)
+				print(msg_gps.lon)
+				print(explore_lon)
 				print((msg_gps.lat-explore_lat)**2 +(msg_gps.lon-explore_lon)**2)
 				if((msg_gps.lat-explore_lat)**2 +(msg_gps.lon-explore_lon)**2 <300):
 					orbit_state = ARR_ROTATE
@@ -361,8 +372,7 @@ while (1):
 			#10
 			elif(orbit_state == WAIT_ORBIT):
 				print("in WAIT_ORBIT state")
-				if (command_type == 4):
-					orbit_state = TWO_ORBIT
+				orbit_state = TWO_ORBIT
 			#11
 			elif(orbit_state == ONE_ORBIT):
 				print("in ONE_ORBIT state")
