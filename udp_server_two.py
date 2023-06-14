@@ -8,20 +8,24 @@ import matplotlib.pyplot as plt
 STABALIZED_STATE = 0
 GUIDED_STATE = 1
 
-DRONE1_START = 0
-LANDING_COMMAND = 0
-TAKEOFF_COMMAND = 1
-GOTO_COMMAND =2
-ORBIT_COMMAND = 3
-LISTEN_COMMAND = 9
+R = 6373.0
+T = 0.5
+P = 60
 
-DEAFAULT_ALT = 10
+DRONE1_START = 0
+DRONE2_START = int(P/T/2)
+LANDING_COMMAND = "0"
+TAKEOFF_COMMAND = "1"
+EXPLORE_COMMAND = "2"
+ORBIT_COMMAND = "3"
+CONFIRM_ORBIT_COMMAND = "4"
+RADAR_COMMAND = "5"
+BIRD_COMMAND = "6"
+
+DEAFAULT_ALT = 3
 
 TAKEOFF_SUCCESS = 2
 TAKEOFF_FAIL = 1
-
-#current drone is at its orbit point,wait the other drone to be ready
-WAIT_ORBIT = 7
 
 #The other drone is in explore
 ONE_ORBIT = 1
@@ -41,9 +45,17 @@ ARR_ROTATE  = 5
 #On its way to the initiial point of the orbit
 START_ORBIT = 6
 
-R = 6373.0
-T = 0.5
-P = 60
+#current drone is at its orbit point,wait the other drone to be ready
+WAIT_ORBIT = 7
+
+#rotate at current orbit point
+RADAR_MODE = 8
+
+#One drone goes high rotate, and the other drone keep orbiting 
+BIRD_MODE = 9
+
+#On its way to the desired height
+WAIT_VERTICLE = 10
 
 Kp = 0.5
 Kd = 2
@@ -70,10 +82,11 @@ print ('Socket created')
 lat_1 = 0
 lon_1 = 0
 yaw_1 = 0
-
+alt_1 = 0 
 lat_2 = 0
 lon_2 = 0
 yaw_2 = 0
+alt_2 = 0
 def readTelemetry1():
     while(1):
         telemetry = ""
@@ -82,9 +95,11 @@ def readTelemetry1():
             telemetry = f.read()
             f.close()
         telemetry = telemetry.split()
-        global lat_1, lon_1
+        global lat_1, lon_1, alt_1, yaw_1
         lat_1 = int(telemetry[0])
         lon_1 = int(telemetry[1])
+        alt_1 = float(telemetry[2])
+        yaw_1 = float(telemetry[3])
         time.sleep(0.02)
 
 def readTelemetry2():
@@ -95,9 +110,11 @@ def readTelemetry2():
             telemetry = f.read()
             f.close()
         telemetry = telemetry.split()
-        global lat_2, lon_2
+        global lat_2, lon_2, alt_2, yaw_2
         lat_2 = int(telemetry[0])
         lon_2 = int(telemetry[1])
+        alt_2 = float(telemetry[2])
+        yaw_2 = float(telemetry[3])
         time.sleep(0.02)
 t1 = Thread(target = readTelemetry1)
 t2 = Thread(target = readTelemetry2)
@@ -121,9 +138,9 @@ def receive_command():
         f.close()
     return command
 
-def send_position(lat, lon, rad, ip, port):
+def send_position(lat, lon, alt, rad,  ip, port):
     s.sendto(("2"+str(int(lat)).zfill(11) + 
-              str(int(lon)).zfill(11)+str(round(rad, 3)).zfill(6)).encode(), (ip, port))
+              str(int(lon)).zfill(11)+str(round(rad, 3)).zfill(6) + str(int(alt)).zfill(2)).encode(), (ip, port))
     
 class drone_machine:
     def __init__(self, drone_id, phone_lat, phone_lon):
@@ -135,6 +152,7 @@ class drone_machine:
             self.lat = lat_1
             self.lon = lon_1
             self.yaw = yaw_1
+            self.alt = alt_1
         else:
             self.orbit_index = int(P/T/2)
             self.ip = '192.168.56.103'
@@ -142,46 +160,53 @@ class drone_machine:
             self.lat = lat_2
             self.lon = lon_2
             self.yaw = yaw_2
+            self.alt = alt_2
         self.current_state = STABALIZED_STATE
-        self.target_rad, self.target_lat, self.target_lon = generate_traj(self.lat, self.lon, RADIUS)
+        self.target_rad, self.target_lat, self.target_lon = generate_traj(phone_lat, phone_lon, RADIUS)
         self.orbit_state = START_ORBIT
         self.explore_lat = self.lat
         self.explore_lat = self.lon
         self.explore = False
+        self.target_alt = DEAFAULT_ALT
+        self.phone_lat = phone_lat
+        self.phone_lon = phone_lon
 
     def update_telemetry(self):
         if self.drone_id == 1:
             self.lat = lat_1
             self.lon = lon_1
             self.yaw = yaw_1
+            self.alt = alt_1
         else:
             self.lat = lat_2
             self.lon = lon_2
             self.yaw = yaw_2
+            self.alt = alt_2
 
-    def send_orbit_pos(self):
+    def go_orbit_pos(self):
         print("drone "+str(self.drone_id)+" go orbit")
         print(self.orbit_index)
         send_position(self.target_lat[self.orbit_index],
                       self.target_lon[self.orbit_index],
+                      self.target_alt,
                       self.target_rad[self.orbit_index],
                       self.ip, self.port)
         
     def send_explore_pos(self):
-        send_position(self.explore_lat, self.explore_lon, 0.0, self.ip, self.port)
+        send_position(self.explore_lat, self.explore_lon, self.target_alt, 0.0, self.ip, self.port)
 
-    def  send_rotate(self, period):
-        s.sendto(("4"+str(period).zfill(3)).encode(), (self.ip, self.port))
+    def send_rotate(self, period):
+        s.sendto(("4"+str(period).zfill(3)+str(self.target_alt).zfill(2)).encode(), (self.ip, self.port))
 
     def check_arrive_orbit(self):
-        """
+        
         print("target:")
         print(int(self.target_lat[self.orbit_index]))
         print(int(self.target_lon[self.orbit_index]))
         print("current:")
         print(int(self.lat))
         print(int(self.lon))
-        """
+        
         return (self.lat-int(self.target_lat[self.orbit_index]))**2 + (self.lon-int(self.target_lon[self.orbit_index]))**2
     
     def check_arrive_explore(self):
@@ -195,23 +220,36 @@ class drone_machine:
         """
         return (self.lat-self.explore_lat)**2 + (self.lon-int(self.explore_lon))**2
     
+    def check_arrive_height(self):
+        """
+        print("target:")
+        print(int(self.explore_lat))
+        print(int(self.explore_lon))
+        print("current:")
+        print(int(self.lat))
+        print(int(self.lon))
+        """
+        return (self.alt-self.target_alt)**2
+    
     def handle_command(self, command):
         self.update_telemetry()
         if (command[0] == "0"):
             #land command
             s.sendto(command.encode(),(self.ip, self.port))
             self.current_state = STABALIZED_STATE
+
         elif(self.current_state == STABALIZED_STATE and command[0] == "1"):
             # takeoff
             s.sendto(command.encode(),(self.ip, self.port))
             self.current_state = GUIDED_STATE
             self.orbit_state = START_ORBIT
+
         elif (self.current_state == GUIDED_STATE):
             if(self.orbit_state == START_ORBIT):
                 #start orbit, go to the initial point
                 print("in START_ORBIT state")
                 if (command[0] == '3'):
-                    self.send_orbit_pos()
+                    self.go_orbit_pos()
                     self.orbit_state = WAIT_MOVEMENT
 
             elif(self.orbit_state == WAIT_MOVEMENT):
@@ -220,30 +258,48 @@ class drone_machine:
                 if (self.check_arrive_orbit() <3000):
                     self.orbit_state = WAIT_ORBIT
                 else: 
-                    self.send_orbit_pos()
-
+                    self.go_orbit_pos()
 
             elif(self.orbit_state == TWO_ORBIT):
                 self.explore = False
                 print("in TWO_ORBIT state")
-                if (command[0] == "2"):
+                if (command[0] == EXPLORE_COMMAND):
                     #no target, keep orbiting
                     if (int(command[1:11]) == 0):
                         self.orbit_state = ONE_ORBIT
                     else: 
                         print(command)
                         print(str(self.drone_id)+"go explore!!!!!!!!!!!!!!!!!!!!")
-                    #receive target, start explore
+                        #receive target, start explore
                         self.orbit_state = EXPLRE_ORBIT
                         self.explore_lat = int(command[1:11])
                         #print(self.explore_lat)
                         self.explore_lon = int(command[12:23])
                         #print(self.explore_lon)
                         self.send_explore_pos()
+
+                elif (command[0] == RADAR_COMMAND):
+                    self.go_orbit_pos()
+                    self.orbit_state = RADAR_MODE
+
+                elif (command[0] == BIRD_COMMAND):
+                    if (self.drone_id == 1):
+                        print(command)
+                        print(str(self.drone_id)+"go explore!!!!!!!!!!!!!!!!!!!!")
+                        #receive target, start explore
+                        self.orbit_state = EXPLRE_ORBIT
+                        self.explore_lat = self.target_lat[self.orbit_index]
+                        #print(self.explore_lat)
+                        self.explore_lon = self.target_lon[self.orbit_index]
+                        self.target_alt = 5
+                        #print(self.explore_lon)
+                        self.send_explore_pos()
+                    else:
+                        self.orbit_state = ONE_ORBIT
                 else:
                     #no explore command, stay in orbit
                     print(self.orbit_index)
-                    self.send_orbit_pos()
+                    self.go_orbit_pos()
                     self.orbit_index = (self.orbit_index+1)%(int(P/T))
 
             elif(self.orbit_state == EXPLRE_ORBIT):
@@ -255,31 +311,39 @@ class drone_machine:
 
             elif(self.orbit_state == ARR_ROTATE):
                 print("in ARR_ROTATE state")
-                if (command[0] == '3'):	
+                if (command[0] == ORBIT_COMMAND):	
                     #if command is orbit, go to orbit position
+                    self.target_alt = DEAFAULT_ALT
                     self.orbit_index = int(command[55:59])
-                    self.send_orbit_pos()
+                    self.go_orbit_pos()
                     self.orbit_state = WAIT_MOVEMENT
                 else:
-                    self.send_rotate(10.0)
+                    self.send_rotate(10)
             elif(self.orbit_state == WAIT_ORBIT):
                 print("in WAIT_ORBIT state")
-                if(command[0] == '4'):
+                if(command[0] == CONFIRM_ORBIT_COMMAND):
                     self.orbit_state = TWO_ORBIT
                 else:
-                    self.send_orbit_pos()
+                    self.go_orbit_pos()
 
             elif(self.orbit_state == ONE_ORBIT):
                 print("in ONE_ORBIT state")
-                if(command[0] == '3'):
+                if(command[0] == ORBIT_COMMAND):
                     self.orbit_index = int(command[55:59])
                     print("drone "+str(self.drone_id))
                     print(orbit_index)
-                    self.send_orbit_pos()
+                    self.go_orbit_pos()
                     self.orbit_state = WAIT_MOVEMENT
                 else:
-                    self.send_orbit_pos()
+                    self.go_orbit_pos()
                     self.orbit_index = (self.orbit_index+1)%(int(P/T))
+            elif(self.orbit_state == RADAR_MODE):
+                if(command[0] == ORBIT_COMMAND):
+                    self.go_orbit_pos()
+                    self.orbit_state = TWO_ORBIT
+                else:
+                    print("radar rotating")
+                    self.send_rotate(10)
 
 command = receive_command()
 print(int(command[32:42]))
